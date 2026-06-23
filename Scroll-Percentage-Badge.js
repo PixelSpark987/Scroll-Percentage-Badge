@@ -4,6 +4,8 @@
 // @version      2.0
 // @description  Adds a badge in the top right corner showing the current scroll percentage. Click to jump to the top or bottom.
 // @author       PixelSpark987 - https://is.gd/PS987
+// @downloadURL  https://raw.githubusercontent.com/PixelSpark987/Scroll-Percentage-Badge/refs/heads/main/Scroll-Percentage-Badge.js
+// @updateURL    https://raw.githubusercontent.com/PixelSpark987/Scroll-Percentage-Badge/refs/heads/main/Scroll-Percentage-Badge.js
 // @match        *://*/*
 // @grant        GM_setValue
 // @grant        GM_getValue
