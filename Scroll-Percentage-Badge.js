@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Scroll Percentage Badge
 // @namespace    http://tampermonkey.net/
-// @version      2.1
+// @version      2.2
 // @description  Adds a badge in the top-right corner showing the current scroll percentage. Click to jump to the top or bottom.
 // @author       PixelSpark987 - https://is.gd/PS987
 // @downloadURL  https://raw.githubusercontent.com/PixelSpark987/Scroll-Percentage-Badge/refs/heads/main/Scroll-Percentage-Badge.js
@@ -28,7 +28,7 @@
         // Styling Details
         fontSize: '12px',
         fontFamily: 'Arial, sans-serif',
-        badgePadding: '6px 10px',
+        badgePadding: '5px 10px',
         borderRadius: '20px',
         zIndex: '1000000000'
     };
@@ -45,7 +45,7 @@
     // Style the badge with a clean, flat aesthetic (No shadows)
     badge.style.setProperty('position', 'fixed', 'important');
     badge.style.setProperty('top', '10px', 'important');
-    badge.style.setProperty('right', '10px', 'important');
+    badge.style.setProperty('right', '12px', 'important');
     badge.style.setProperty('padding', CONFIG.badgePadding, 'important');
     badge.style.setProperty('border-radius', CONFIG.borderRadius, 'important');
     badge.style.setProperty('color', '#ffffff', 'important');
