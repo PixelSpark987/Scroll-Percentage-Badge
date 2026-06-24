@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Scroll Percentage Badge
 // @namespace    http://tampermonkey.net/
-// @version      2.2
-// @description  Adds a badge in the top-right corner showing the current scroll percentage. Click to jump to the top or bottom.
+// @version      2.4
+// @description  Adds a badge in the top-right corner showing the current scroll percentage. Click to jump to the top or bottom. Long-press and drag to snap to any corner.
 // @author       PixelSpark987 - https://is.gd/PS987
 // @downloadURL  https://raw.githubusercontent.com/PixelSpark987/Scroll-Percentage-Badge/refs/heads/main/Scroll-Percentage-Badge.js
 // @updateURL    https://raw.githubusercontent.com/PixelSpark987/Scroll-Percentage-Badge/refs/heads/main/Scroll-Percentage-Badge.js
@@ -24,6 +24,7 @@
         // Animation Timings (in milliseconds)
         fadeDelay: 3000,       // Time before badge fades out due to inactivity
         transitionTime: 500,   // Transition time for fading in/out (0.5s)
+        longPressDelay: 300,   // Time holding down before drag mode activates
 
         // Styling Details
         fontSize: '12px',
@@ -37,15 +38,30 @@
     let lastActiveScroller = null;
     let fadeTimeout = null;
     let currentPercent = -1; // Keep track of the last rendered percentage
+    let currentUrl = location.href;
+
+    // Drag and Snap State System
+    let isDragging = false;
+    let isMouseDown = false;
+    let longPressTimeout = null;
+    let startX = 0;
+    let startY = 0;
 
     // Create the badge element
     const badge = document.createElement('div');
     badge.id = 'tm-scroll-percentage-badge';
 
+    // Set the initial home coordinates
+    function resetToHomePosition() {
+        badge.style.removeProperty('bottom');
+        badge.style.removeProperty('left');
+        badge.style.setProperty('top', '10px', 'important');
+        badge.style.setProperty('right', '12px', 'important');
+    }
+
     // Style the badge with a clean, flat aesthetic (No shadows)
     badge.style.setProperty('position', 'fixed', 'important');
-    badge.style.setProperty('top', '10px', 'important');
-    badge.style.setProperty('right', '12px', 'important');
+    resetToHomePosition();
     badge.style.setProperty('padding', CONFIG.badgePadding, 'important');
     badge.style.setProperty('border-radius', CONFIG.borderRadius, 'important');
     badge.style.setProperty('color', '#ffffff', 'important');
@@ -67,49 +83,149 @@
     function resetFadeTimer() {
         if (fadeTimeout) clearTimeout(fadeTimeout);
 
-        if (!badge.matches(':hover')) {
+        if (!badge.matches(':hover') && !isDragging) {
             badge.style.setProperty('opacity', CONFIG.activeOpacity, 'important');
         }
 
         fadeTimeout = setTimeout(() => {
-            if (!badge.matches(':hover')) {
+            if (!badge.matches(':hover') && !isDragging) {
                 badge.style.setProperty('opacity', CONFIG.inactiveOpacity, 'important');
             }
         }, CONFIG.fadeDelay);
     }
 
-    // Click event to toggle teleportation to top or bottom
-    badge.onclick = function(e) {
-        e.preventDefault();
-        e.stopPropagation();
+    // Process drag physics tracking loop
+    function onMouseMove(e) {
+        if (!isMouseDown) return;
 
+        if (!isDragging) {
+            // Check if mouse has moved past a tiny threshold to initiate a true drag event action
+            const moveX = Math.abs(e.clientX - startX);
+            const moveY = Math.abs(e.clientY - startY);
+            if (moveX > 3 || moveY > 3) {
+                isDragging = true;
+                badge.style.setProperty('transition', 'none', 'important');
+                badge.style.setProperty('opacity', CONFIG.activeOpacity, 'important');
+            }
+        }
+
+        if (isDragging) {
+            const x = e.clientX;
+            const y = e.clientY;
+            
+            badge.style.removeProperty('right');
+            badge.style.removeProperty('bottom');
+            badge.style.setProperty('top', `${y - 12}px`, 'important');
+            badge.style.setProperty('left', `${x - 20}px`, 'important');
+        }
+    }
+
+    // Process snapping boundaries execution on mouse release
+    function onMouseUp(e) {
+        if (longPressTimeout) clearTimeout(longPressTimeout);
+        isMouseDown = false;
+
+        if (isDragging) {
+            isDragging = false;
+            
+            // Re-enable smooth transition animations for snapping back into position properties
+            badge.style.setProperty('transition', `background-color 0.05s ease, transform 0.1s ease, opacity ${CONFIG.transitionTime}ms ease, top 0.2s ease, left 0.2s ease, right 0.2s ease, bottom 0.2s ease`, 'important');
+            
+            const x = e.clientX;
+            const y = e.clientY;
+            const midX = window.innerWidth / 2;
+            const midY = window.innerHeight / 2;
+
+            // Clear absolute floating positioning rules entirely
+            badge.style.removeProperty('top');
+            badge.style.removeProperty('left');
+            badge.style.removeProperty('right');
+            badge.style.removeProperty('bottom');
+
+            // Determine closest layout quadrant grid location
+            if (x < midX && y < midY) {
+                // Top Left
+                badge.style.setProperty('top', '10px', 'important');
+                badge.style.setProperty('left', '12px', 'important');
+            } else if (x >= midX && y < midY) {
+                // Top Right (Default Home Location)
+                badge.style.setProperty('top', '10px', 'important');
+                badge.style.setProperty('right', '12px', 'important');
+            } else if (x < midX && y >= midY) {
+                // Bottom Left
+                badge.style.setProperty('bottom', '10px', 'important');
+                badge.style.setProperty('left', '12px', 'important');
+            } else {
+                // Bottom Right
+                badge.style.setProperty('bottom', '10px', 'important');
+                badge.style.setProperty('right', '12px', 'important');
+            }
+
+            resetFadeTimer();
+            
+            document.removeEventListener('mousemove', onMouseMove);
+            document.removeEventListener('mouseup', onMouseUp);
+            return;
+        }
+
+        document.removeEventListener('mousemove', onMouseMove);
+        document.removeEventListener('mouseup', onMouseUp);
+
+        // If it was just a quick tap without drag actions, fire standard scroll navigation execution rules
+        executeScrollClickToggle();
+    }
+
+    // Setup listener hooks tracking dragging initialization variables
+    badge.onmousedown = function(e) {
+        e.preventDefault();
+        isMouseDown = true;
+        startX = e.clientX;
+        startY = e.clientY;
+
+        if (longPressTimeout) clearTimeout(longPressTimeout);
+
+        longPressTimeout = setTimeout(() => {
+            if (isMouseDown) {
+                isDragging = true;
+                badge.style.setProperty('transition', 'none', 'important');
+                badge.style.setProperty('opacity', CONFIG.activeOpacity, 'important');
+            }
+        }, CONFIG.longPressDelay);
+
+        document.addEventListener('mousemove', onMouseMove);
+        document.addEventListener('mouseup', onMouseUp);
+    };
+
+    // Isolated original navigation block execution processing sequence
+    function executeScrollClickToggle() {
         const scroller = getScrollerData();
         const totalScrollable = scroller.height - scroller.client;
 
-        // Calculate the current scroll calculation precisely on click
         let exactPercent = 0;
         if (totalScrollable > 0) {
             exactPercent = Math.round((scroller.top / totalScrollable) * 100);
         }
 
-        // Determine target destination based on whether we are at the top or not
         const targetTop = exactPercent === 0 ? scroller.height : 0;
 
-        // 1. Reset standard window view positions if window is the active layer
         if (!lastActiveScroller || lastActiveScroller === document.documentElement || lastActiveScroller === document.body) {
             window.scrollTo({ top: targetTop, behavior: 'auto' });
             document.documentElement.scrollTop = targetTop;
             document.body.scrollTop = targetTop;
         }
 
-        // 2. Teleport the last known container that was actively scrolled
         if (lastActiveScroller && typeof lastActiveScroller.scrollTo === 'function') {
             lastActiveScroller.scrollTo({ top: targetTop, behavior: 'auto' });
             lastActiveScroller.scrollTop = targetTop;
         }
 
-        // Force an immediate update frame so the badge updates its percentage values instantly
         updateScrollBadge();
+    }
+
+    // Prevent direct standard inline badge click operations from breaking structural timing calculations
+    badge.onclick = function(e) {
+        e.preventDefault();
+        e.stopPropagation();
     };
 
     // Hover Event Tracking
@@ -164,6 +280,11 @@
 
     // Function to calculate scroll percentage and update badge
     function updateScrollBadge() {
+        if (location.href !== currentUrl) {
+            currentUrl = location.href;
+            resetToHomePosition();
+        }
+
         const scroller = getScrollerData();
         const totalScrollable = scroller.height - scroller.client;
 
