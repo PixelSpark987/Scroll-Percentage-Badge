@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Scroll Percentage Badge
 // @namespace    http://tampermonkey.net/
-// @version      2.4
-// @description  Adds a badge in the top-right corner showing the current scroll percentage. Click to jump to the top or bottom. Long-press and drag to snap to any corner.
+// @version      2.5
+// @description  Adds a badge in the top-right corner showing the current scroll percentage. Click to jump to the top or bottom. Long-press and drag to snap to top-left, top-right, or bottom-left corners.
 // @author       PixelSpark987 - https://is.gd/PS987
 // @downloadURL  https://raw.githubusercontent.com/PixelSpark987/Scroll-Percentage-Badge/refs/heads/main/Scroll-Percentage-Badge.js
 // @updateURL    https://raw.githubusercontent.com/PixelSpark987/Scroll-Percentage-Badge/refs/heads/main/Scroll-Percentage-Badge.js
@@ -133,8 +133,8 @@
             
             const x = e.clientX;
             const y = e.clientY;
-            const midX = window.innerWidth / 2;
-            const midY = window.innerHeight / 2;
+            const winWidth = window.innerWidth;
+            const winHeight = window.innerHeight;
 
             // Clear absolute floating positioning rules entirely
             badge.style.removeProperty('top');
@@ -142,23 +142,35 @@
             badge.style.removeProperty('right');
             badge.style.removeProperty('bottom');
 
-            // Determine closest layout quadrant grid location
-            if (x < midX && y < midY) {
-                // Top Left
+            // Define the 3 valid corner coordinate sets (Top Left, Top Right, Bottom Left)
+            const corners = [
+                { name: 'topLeft',     x: 0,        y: 0 },
+                { name: 'topRight',    x: winWidth, y: 0 },
+                { name: 'bottomLeft',  x: 0,        y: winHeight }
+            ];
+
+            // Calculate Euclidean distance to find the absolute closest available target corner
+            let closestCorner = corners[0];
+            let minDistance = Infinity;
+
+            for (const corner of corners) {
+                const distance = Math.sqrt(Math.pow(x - corner.x, 2) + Math.pow(y - corner.y, 2));
+                if (distance < minDistance) {
+                    minDistance = distance;
+                    closestCorner = corner;
+                }
+            }
+
+            // Snap the layout elements into the closest chosen position properties
+            if (closestCorner.name === 'topLeft') {
                 badge.style.setProperty('top', '10px', 'important');
                 badge.style.setProperty('left', '12px', 'important');
-            } else if (x >= midX && y < midY) {
-                // Top Right (Default Home Location)
+            } else if (closestCorner.name === 'topRight') {
                 badge.style.setProperty('top', '10px', 'important');
                 badge.style.setProperty('right', '12px', 'important');
-            } else if (x < midX && y >= midY) {
-                // Bottom Left
+            } else if (closestCorner.name === 'bottomLeft') {
                 badge.style.setProperty('bottom', '10px', 'important');
                 badge.style.setProperty('left', '12px', 'important');
-            } else {
-                // Bottom Right
-                badge.style.setProperty('bottom', '10px', 'important');
-                badge.style.setProperty('right', '12px', 'important');
             }
 
             resetFadeTimer();
