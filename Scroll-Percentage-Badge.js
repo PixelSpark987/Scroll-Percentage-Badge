@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Scroll Percentage Badge
 // @namespace    http://tampermonkey.net/
-// @version      4.0
+// @version      4.1
 // @description  Adds a badge in the top-right corner showing the current scroll percentage. Click to jump to the top or bottom. Long-press and drag to snap to top-left, top-right, or bottom-left corners.
 // @author       PixelSpark987 - https://is.gd/PS987
 // @downloadURL  https://raw.githubusercontent.com/PixelSpark987/Scroll-Percentage-Badge/refs/heads/main/Scroll-Percentage-Badge.js
@@ -72,6 +72,7 @@
     badge.style.setProperty('cursor', 'pointer', 'important');
     badge.style.setProperty('display', 'block', 'important');
     badge.style.setProperty('user-select', 'none', 'important');
+    badge.style.setProperty('touch-action', 'none', 'important');
 
     // Set dynamic animation speeds using config variables
     badge.style.setProperty('transition', `background-color 0.05s ease, transform 0.1s ease, opacity ${CONFIG.transitionTime}ms ease`, 'important');
@@ -95,13 +96,16 @@
     }
 
     // Process drag physics tracking loop
-    function onMouseMove(e) {
+    function onPointerMove(e) {
         if (!isMouseDown) return;
 
+        const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+        const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+
         if (!isDragging) {
-            // Check if mouse has moved past a tiny threshold to initiate a true drag event action
-            const moveX = Math.abs(e.clientX - startX);
-            const moveY = Math.abs(e.clientY - startY);
+            // Check if pointer has moved past a tiny threshold to initiate a true drag event action
+            const moveX = Math.abs(clientX - startX);
+            const moveY = Math.abs(clientY - startY);
             if (moveX > 3 || moveY > 3) {
                 isDragging = true;
                 badge.style.setProperty('transition', 'none', 'important');
@@ -110,20 +114,22 @@
         }
 
         if (isDragging) {
-            const x = e.clientX;
-            const y = e.clientY;
+            if (e.cancelable) e.preventDefault();
             
             badge.style.removeProperty('right');
             badge.style.removeProperty('bottom');
-            badge.style.setProperty('top', `${y - 12}px`, 'important');
-            badge.style.setProperty('left', `${x - 20}px`, 'important');
+            badge.style.setProperty('top', `${clientY - 12}px`, 'important');
+            badge.style.setProperty('left', `${clientX - 20}px`, 'important');
         }
     }
 
-    // Process snapping boundaries execution on mouse release
-    function onMouseUp(e) {
+    // Process snapping boundaries execution on pointer release
+    function onPointerUp(e) {
         if (longPressTimeout) clearTimeout(longPressTimeout);
         isMouseDown = false;
+
+        const clientX = e.changedTouches ? e.changedTouches[0].clientX : e.clientX;
+        const clientY = e.changedTouches ? e.changedTouches[0].clientY : e.clientY;
 
         if (isDragging) {
             isDragging = false;
@@ -131,8 +137,6 @@
             // Re-enable smooth transition animations for snapping back into position properties
             badge.style.setProperty('transition', `background-color 0.05s ease, transform 0.1s ease, opacity ${CONFIG.transitionTime}ms ease, top 0.2s ease, left 0.2s ease, right 0.2s ease, bottom 0.2s ease`, 'important');
             
-            const x = e.clientX;
-            const y = e.clientY;
             const winWidth = window.innerWidth;
             const winHeight = window.innerHeight;
 
@@ -154,7 +158,7 @@
             let minDistance = Infinity;
 
             for (const corner of corners) {
-                const distance = Math.sqrt(Math.pow(x - corner.x, 2) + Math.pow(y - corner.y, 2));
+                const distance = Math.sqrt(Math.pow(clientX - corner.x, 2) + Math.pow(clientY - corner.y, 2));
                 if (distance < minDistance) {
                     minDistance = distance;
                     closestCorner = corner;
@@ -175,24 +179,31 @@
 
             resetFadeTimer();
             
-            document.removeEventListener('mousemove', onMouseMove);
-            document.removeEventListener('mouseup', onMouseUp);
+            removeDragListeners();
             return;
         }
 
-        document.removeEventListener('mousemove', onMouseMove);
-        document.removeEventListener('mouseup', onMouseUp);
+        removeDragListeners();
 
         // If it was just a quick tap without drag actions, fire standard scroll navigation execution rules
         executeScrollClickToggle();
     }
 
+    function removeDragListeners() {
+        document.removeEventListener('mousemove', onPointerMove);
+        document.removeEventListener('mouseup', onPointerUp);
+        document.removeEventListener('touchmove', onPointerMove);
+        document.removeEventListener('touchend', onPointerUp);
+        document.removeEventListener('touchcancel', onPointerUp);
+    }
+
     // Setup listener hooks tracking dragging initialization variables
-    badge.onmousedown = function(e) {
-        e.preventDefault();
+    function onPointerDown(e) {
+        if (e.type === 'mousedown' && e.button !== 0) return;
+
         isMouseDown = true;
-        startX = e.clientX;
-        startY = e.clientY;
+        startX = e.touches ? e.touches[0].clientX : e.clientX;
+        startY = e.touches ? e.touches[0].clientY : e.clientY;
 
         if (longPressTimeout) clearTimeout(longPressTimeout);
 
@@ -204,9 +215,15 @@
             }
         }, CONFIG.longPressDelay);
 
-        document.addEventListener('mousemove', onMouseMove);
-        document.addEventListener('mouseup', onMouseUp);
-    };
+        document.addEventListener('mousemove', onPointerMove);
+        document.addEventListener('mouseup', onPointerUp);
+        document.addEventListener('touchmove', onPointerMove, { passive: false });
+        document.addEventListener('touchend', onPointerUp);
+        document.addEventListener('touchcancel', onPointerUp);
+    }
+
+    badge.addEventListener('mousedown', onPointerDown);
+    badge.addEventListener('touchstart', onPointerDown, { passive: true });
 
     // Isolated original navigation block execution processing sequence
     function executeScrollClickToggle() {
