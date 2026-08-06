@@ -23,8 +23,8 @@
 
         // Animation Timings (in milliseconds)
         fadeDelay: 3000,       // Time before badge fades out due to inactivity
-        transitionTime: 500,   // Transition time for fading in/out (0.5s)
-        longPressDelay: 1000,  // Time holding down before drag mode activates
+        transitionTime: 500,   // Transition time for fading in/out
+        longPressDelay: 500,  // Time holding down before drag mode activates
 
         // Styling Details
         fontSize: '12px',
