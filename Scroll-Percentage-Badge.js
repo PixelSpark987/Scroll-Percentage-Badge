@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Scroll Percentage Badge
 // @namespace    http://tampermonkey.net/
-// @version      4.3
+// @version      4.2
 // @description  Adds a badge in the top-right corner showing the current scroll percentage. Click to jump to the top or bottom. Long-press and drag to snap to top-left, top-right, or bottom-left corners.
 // @author       PixelSpark987 - https://is.gd/PS987
 // @downloadURL  https://raw.githubusercontent.com/PixelSpark987/Scroll-Percentage-Badge/refs/heads/main/Scroll-Percentage-Badge.js
@@ -23,8 +23,11 @@
 
         // Animation Timings (in milliseconds)
         fadeDelay: 3000,       // Time before badge fades out due to inactivity
-        transitionTime: 500,   // Transition time for fading in/out
-        longPressDelay: 500,  // Time holding down before drag mode activates
+        transitionTime: 500,   // Transition time for fading in/out (0.5s)
+        
+        // Distinct Platform Delays
+        desktopLongPressDelay: 300,  // Hold time before drag mode activates on desktop
+        mobileLongPressDelay: 500,   // Hold time before drag mode activates on mobile
 
         // Styling Details
         fontSize: '12px',
@@ -42,11 +45,13 @@
 
     // Drag and Snap State System
     let isDragging = false;
-    let isMouseDown = false;
-    let canDrag = false;
+    let isPointerDown = false;
+    let isLongPressed = false;
+    let hasMovedTooMuch = false; // Tracks if movement breaks the tap/long-press threshold
     let longPressTimeout = null;
     let startX = 0;
     let startY = 0;
+    let isTouchInteraction = false;
 
     // Create the badge element
     const badge = document.createElement('div');
@@ -73,7 +78,6 @@
     badge.style.setProperty('cursor', 'pointer', 'important');
     badge.style.setProperty('display', 'block', 'important');
     badge.style.setProperty('user-select', 'none', 'important');
-    badge.style.setProperty('touch-action', 'none', 'important');
 
     // Set dynamic animation speeds using config variables
     badge.style.setProperty('transition', `background-color 0.05s ease, transform 0.1s ease, opacity ${CONFIG.transitionTime}ms ease`, 'important');
@@ -98,20 +102,28 @@
 
     // Process drag physics tracking loop
     function onPointerMove(e) {
-        if (!isMouseDown) return;
+        if (!isPointerDown) return;
 
-        const clientX = e.touches ? e.touches[0].clientX : e.clientX;
-        const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+        const clientX = isTouchInteraction ? (e.touches ? e.touches[0].clientX : startX) : e.clientX;
+        const clientY = isTouchInteraction ? (e.touches ? e.touches[0].clientY : startY) : e.clientY;
 
-        if (!canDrag) {
-            // Cancel drag intent if the pointer moves past a threshold before the 1000ms delay (e.g. normal page scrolling)
-            const moveX = Math.abs(clientX - startX);
-            const moveY = Math.abs(clientY - startY);
-            if (moveX > 15 || moveY > 15) {
+        const moveX = Math.abs(clientX - startX);
+        const moveY = Math.abs(clientY - startY);
+        
+        // Mobile screens need a slightly higher threshold so thumb rolls don't count as a drag
+        const threshold = isTouchInteraction ? 10 : 3;
+
+        if (!isLongPressed) {
+            // If they moved past the threshold before the delay finished, cancel the hold intent
+            if (moveX > threshold || moveY > threshold) {
+                hasMovedTooMuch = true;
                 if (longPressTimeout) clearTimeout(longPressTimeout);
-                isMouseDown = false;
             }
             return;
+        }
+
+        if (!isDragging) {
+            isDragging = true;
         }
 
         if (isDragging) {
@@ -127,14 +139,14 @@
     // Process snapping boundaries execution on pointer release
     function onPointerUp(e) {
         if (longPressTimeout) clearTimeout(longPressTimeout);
+        isPointerDown = false;
 
-        const clientX = e.changedTouches ? e.changedTouches[0].clientX : e.clientX;
-        const clientY = e.changedTouches ? e.changedTouches[0].clientY : e.clientY;
+        const clientX = (isTouchInteraction && e.changedTouches) ? e.changedTouches[0].clientX : e.clientX;
+        const clientY = (isTouchInteraction && e.changedTouches) ? e.changedTouches[0].clientY : e.clientY;
 
         if (isDragging) {
             isDragging = false;
-            canDrag = false;
-            isMouseDown = false;
+            isLongPressed = false;
             
             // Re-enable smooth transition animations for snapping back into position properties
             badge.style.setProperty('transition', `background-color 0.05s ease, transform 0.1s ease, opacity ${CONFIG.transitionTime}ms ease, top 0.2s ease, left 0.2s ease, right 0.2s ease, bottom 0.2s ease`, 'important');
@@ -184,14 +196,12 @@
             return;
         }
 
-        // If it was a quick tap and the drag intent wasn't cancelled by movement, jump the page
-        if (isMouseDown) {
+        removeDragListeners();
+
+        // If it was just a quick tap without drag actions, and it didn't drift wildly across the screen
+        if (!hasMovedTooMuch) {
             executeScrollClickToggle();
         }
-
-        isMouseDown = false;
-        canDrag = false;
-        removeDragListeners();
     }
 
     function removeDragListeners() {
@@ -204,26 +214,30 @@
 
     // Setup listener hooks tracking dragging initialization variables
     function onPointerDown(e) {
-        if (e.type === 'mousedown' && e.button !== 0) return;
+        if (e.type === 'mousedown' && e.button !== 0) return; // Ignore right-clicks
 
-        isMouseDown = true;
-        canDrag = false;
+        isTouchInteraction = e.type.startsWith('touch');
+        isPointerDown = true;
         isDragging = false;
-        startX = e.touches ? e.touches[0].clientX : e.clientX;
-        startY = e.touches ? e.touches[0].clientY : e.clientY;
+        isLongPressed = false;
+        hasMovedTooMuch = false;
+        
+        startX = isTouchInteraction ? e.touches[0].clientX : e.clientX;
+        startY = isTouchInteraction ? e.touches[0].clientY : e.clientY;
 
         if (longPressTimeout) clearTimeout(longPressTimeout);
 
+        const delayToUse = isTouchInteraction ? CONFIG.mobileLongPressDelay : CONFIG.desktopLongPressDelay;
+
         longPressTimeout = setTimeout(() => {
-            if (isMouseDown) {
-                canDrag = true;
-                isDragging = true;
+            if (isPointerDown && !hasMovedTooMuch) {
+                isLongPressed = true;
                 badge.style.setProperty('transition', 'none', 'important');
                 badge.style.setProperty('opacity', CONFIG.activeOpacity, 'important');
             }
-        }, CONFIG.longPressDelay);
+        }, delayToUse);
 
-        document.addEventListener('mousemove', onPointerMove);
+        document.addEventListener('mousemove', onPointerMove, { passive: false });
         document.addEventListener('mouseup', onPointerUp);
         document.addEventListener('touchmove', onPointerMove, { passive: false });
         document.addEventListener('touchend', onPointerUp);
