@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Scroll Percentage Badge
 // @namespace    http://tampermonkey.net/
-// @version      4.1
+// @version      4.2
 // @description  Adds a badge in the top-right corner showing the current scroll percentage. Click to jump to the top or bottom. Long-press and drag to snap to top-left, top-right, or bottom-left corners.
 // @author       PixelSpark987 - https://is.gd/PS987
 // @downloadURL  https://raw.githubusercontent.com/PixelSpark987/Scroll-Percentage-Badge/refs/heads/main/Scroll-Percentage-Badge.js
@@ -24,7 +24,7 @@
         // Animation Timings (in milliseconds)
         fadeDelay: 3000,       // Time before badge fades out due to inactivity
         transitionTime: 500,   // Transition time for fading in/out (0.5s)
-        longPressDelay: 300,   // Time holding down before drag mode activates
+        longPressDelay: 1000,  // Time holding down before drag mode activates
 
         // Styling Details
         fontSize: '12px',
@@ -43,6 +43,7 @@
     // Drag and Snap State System
     let isDragging = false;
     let isMouseDown = false;
+    let canDrag = false;
     let longPressTimeout = null;
     let startX = 0;
     let startY = 0;
@@ -102,15 +103,15 @@
         const clientX = e.touches ? e.touches[0].clientX : e.clientX;
         const clientY = e.touches ? e.touches[0].clientY : e.clientY;
 
-        if (!isDragging) {
-            // Check if pointer has moved past a tiny threshold to initiate a true drag event action
+        if (!canDrag) {
+            // Cancel drag intent if the pointer moves past a threshold before the 1000ms delay (e.g. normal page scrolling)
             const moveX = Math.abs(clientX - startX);
             const moveY = Math.abs(clientY - startY);
-            if (moveX > 3 || moveY > 3) {
-                isDragging = true;
-                badge.style.setProperty('transition', 'none', 'important');
-                badge.style.setProperty('opacity', CONFIG.activeOpacity, 'important');
+            if (moveX > 15 || moveY > 15) {
+                if (longPressTimeout) clearTimeout(longPressTimeout);
+                isMouseDown = false;
             }
+            return;
         }
 
         if (isDragging) {
@@ -126,13 +127,14 @@
     // Process snapping boundaries execution on pointer release
     function onPointerUp(e) {
         if (longPressTimeout) clearTimeout(longPressTimeout);
-        isMouseDown = false;
 
         const clientX = e.changedTouches ? e.changedTouches[0].clientX : e.clientX;
         const clientY = e.changedTouches ? e.changedTouches[0].clientY : e.clientY;
 
         if (isDragging) {
             isDragging = false;
+            canDrag = false;
+            isMouseDown = false;
             
             // Re-enable smooth transition animations for snapping back into position properties
             badge.style.setProperty('transition', `background-color 0.05s ease, transform 0.1s ease, opacity ${CONFIG.transitionTime}ms ease, top 0.2s ease, left 0.2s ease, right 0.2s ease, bottom 0.2s ease`, 'important');
@@ -178,15 +180,18 @@
             }
 
             resetFadeTimer();
-            
             removeDragListeners();
             return;
         }
 
-        removeDragListeners();
+        // If it was a quick tap and the drag intent wasn't cancelled by movement, jump the page
+        if (isMouseDown) {
+            executeScrollClickToggle();
+        }
 
-        // If it was just a quick tap without drag actions, fire standard scroll navigation execution rules
-        executeScrollClickToggle();
+        isMouseDown = false;
+        canDrag = false;
+        removeDragListeners();
     }
 
     function removeDragListeners() {
@@ -202,6 +207,8 @@
         if (e.type === 'mousedown' && e.button !== 0) return;
 
         isMouseDown = true;
+        canDrag = false;
+        isDragging = false;
         startX = e.touches ? e.touches[0].clientX : e.clientX;
         startY = e.touches ? e.touches[0].clientY : e.clientY;
 
@@ -209,6 +216,7 @@
 
         longPressTimeout = setTimeout(() => {
             if (isMouseDown) {
+                canDrag = true;
                 isDragging = true;
                 badge.style.setProperty('transition', 'none', 'important');
                 badge.style.setProperty('opacity', CONFIG.activeOpacity, 'important');
